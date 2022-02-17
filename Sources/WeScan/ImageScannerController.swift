@@ -27,7 +27,10 @@ public protocol ImageScannerControllerDelegate: NSObjectProtocol {
     /// - Discussion: Your delegate's implementation of this method should dismiss the image scanner controller.
     func imageScannerControllerDidCancel(_ scanner: ImageScannerController)
 
-    /// Tells the delegate that an error occurred during the user's scanning experience.
+    /// Go to Photos
+    func imageScannerControllerGoToPhotos(_ scanner: ImageScannerController)
+
+    /// Tells the delegate that an error occured during the user's scanning experience.
     ///
     /// - Parameters:
     ///   - scanner: The scanner controller object managing the scanning interface.
@@ -189,8 +192,7 @@ public struct ImageScannerResults {
     /// The deskewed and cropped scan using the detected rectangle, without any filters.
     public var croppedScan: ImageScannerScan
 
-    /// The enhanced scan, passed through an Adaptive Thresholding function.
-    /// This image will always be grayscale and may not always be available.
+    /// The enhanced scan, passed through an Adaptive Thresholding function. This image will always be grayscale and may not always be available.
     public var enhancedScan: ImageScannerScan?
 
     /// Whether the user selected the enhanced scan or not.
@@ -200,6 +202,18 @@ public struct ImageScannerResults {
     /// The detected rectangle which was used to generate the `scannedImage`.
     public var detectedRectangle: Quadrilateral
 
+    @available(*, unavailable, renamed: "originalScan")
+    public var originalImage: UIImage?
+
+    @available(*, unavailable, renamed: "croppedScan")
+    public var scannedImage: UIImage?
+
+    @available(*, unavailable, renamed: "enhancedScan")
+    public var enhancedImage: UIImage?
+
+    @available(*, unavailable, renamed: "doesUserPreferEnhancedScan")
+    public var doesUserPreferEnhancedImage: Bool = false
+
     init(
         detectedRectangle: Quadrilateral,
         originalScan: ImageScannerScan,
@@ -208,11 +222,9 @@ public struct ImageScannerResults {
         doesUserPreferEnhancedScan: Bool = false
     ) {
         self.detectedRectangle = detectedRectangle
-
         self.originalScan = originalScan
         self.croppedScan = croppedScan
         self.enhancedScan = enhancedScan
-
         self.doesUserPreferEnhancedScan = doesUserPreferEnhancedScan
     }
 }
