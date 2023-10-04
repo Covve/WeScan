@@ -1,0 +1,227 @@
+diff --git a/CovveWeScan.podspec b/CovveWeScan.podspec
+new file mode 100644
+index 0000000..8bd9026
+--- /dev/null
++++ b/CovveWeScan.podspec
+@@ -0,0 +1,20 @@
++Pod::Spec.new do |spec|
++  spec.name             = 'CovveWeScan'
++  spec.version          = '3.0.0'
++  spec.summary          = 'Document Scanning Made Easy for iOS'
++  spec.description      = 'WeScan makes it easy to add scanning functionalities to your iOS app! It\'s modelled after UIImagePickerController, which makes it a breeze to use.'
++
++  spec.homepage         = 'https://github.com/Covve/WeScan'
++  spec.license          = { :type => 'MIT', :file => 'LICENSE' }
++  spec.authors           = {
++    'Boris Emorine' => 'boris@wetransfer.com',
++    'Antoine van der Lee' => 'antoine@wetransfer.com'
++  }
++  spec.source           = { :git => 'https://github.com/Covve/WeScan.git', :tag => "v#{spec.version}" }
++
++
++  spec.swift_version = '5.0'
++  spec.ios.deployment_target = '10.0'
++  spec.source_files = 'Sources/WeScan/**/*.{h,m,swift}'
++  spec.resources = 'Sources/WeScan/**/*.{strings,png}'
++end
+diff --git a/Sources/WeScan/ImageScannerController.swift b/Sources/WeScan/ImageScannerController.swift
+index 978c1e1..48b34af 100644
+--- a/Sources/WeScan/ImageScannerController.swift
++++ b/Sources/WeScan/ImageScannerController.swift
+@@ -27,7 +27,10 @@ public protocol ImageScannerControllerDelegate: NSObjectProtocol {
+     /// - Discussion: Your delegate's implementation of this method should dismiss the image scanner controller.
+     func imageScannerControllerDidCancel(_ scanner: ImageScannerController)
+
+-    /// Tells the delegate that an error occurred during the user's scanning experience.
++    /// Go to Photos
++    func imageScannerControllerGoToPhotos(_ scanner: ImageScannerController)
++
++    /// Tells the delegate that an error occured during the user's scanning experience.
+     ///
+     /// - Parameters:
+     ///   - scanner: The scanner controller object managing the scanning interface.
+@@ -65,7 +68,11 @@ public final class ImageScannerController: UINavigationController {
+
+         self.imageScannerDelegate = delegate
+
+-        if #available(iOS 13.0, *) {
++        if #available(iOS 15.0, *) {
++            navigationBar.tintColor = .white
++            navigationBar.titleTextAttributes = [.foregroundColor: UIColor.white]
++            navigationBar.barStyle = .black
++        } else if #available(iOS 13.0, *) {
+             navigationBar.tintColor = .label
+         } else {
+             navigationBar.tintColor = .black
+@@ -185,8 +192,7 @@ public struct ImageScannerResults {
+     /// The deskewed and cropped scan using the detected rectangle, without any filters.
+     public var croppedScan: ImageScannerScan
+
+-    /// The enhanced scan, passed through an Adaptive Thresholding function.
+-    /// This image will always be grayscale and may not always be available.
++    /// The enhanced scan, passed through an Adaptive Thresholding function. This image will always be grayscale and may not always be available.
+     public var enhancedScan: ImageScannerScan?
+
+     /// Whether the user selected the enhanced scan or not.
+@@ -204,11 +222,9 @@ public struct ImageScannerResults {
+         doesUserPreferEnhancedScan: Bool = false
+     ) {
+         self.detectedRectangle = detectedRectangle
+-
+         self.originalScan = originalScan
+         self.croppedScan = croppedScan
+         self.enhancedScan = enhancedScan
+-
+         self.doesUserPreferEnhancedScan = doesUserPreferEnhancedScan
+     }
+ }
+diff --git a/Sources/WeScan/Review/ReviewViewController.swift b/Sources/WeScan/Review/ReviewViewController.swift
+index 4608c23..85f8599 100644
+--- a/Sources/WeScan/Review/ReviewViewController.swift
++++ b/Sources/WeScan/Review/ReviewViewController.swift
+@@ -68,8 +68,7 @@ final class ReviewViewController: UIViewController {
+     override func viewDidLoad() {
+         super.viewDidLoad()
+
+-        enhancedImageIsAvailable = results.enhancedScan != nil
+-
++        enhancedImageIsAvailable = false
+         setupViews()
+         setupToolbar()
+         setupConstraints()
+diff --git a/Sources/WeScan/Scan/FocusRectangleView.swift b/Sources/WeScan/Scan/FocusRectangleView.swift
+index ed58c59..b0ce196 100644
+--- a/Sources/WeScan/Scan/FocusRectangleView.swift
++++ b/Sources/WeScan/Scan/FocusRectangleView.swift
+@@ -15,15 +15,10 @@ final class FocusRectangleView: UIView {
+         let finalSize: CGFloat = 80
+
+         // Here, we create the frame to be the `originalSize`, with it's center being the `touchPoint`.
+-        self.init(
+-            frame: CGRect(
+-                x: touchPoint.x - (originalSize / 2),
+-                y: touchPoint.y - (originalSize / 2),
+-                width: originalSize,
+-                height: originalSize
+-            )
+-        )
++        self.init(frame: CGRect(x: touchPoint.x - (originalSize / 2), y: touchPoint.y - (originalSize / 2), width: originalSize, height: originalSize))
+
++        // fix cancel button becoming unclickable when focus rectangle is drawn over it
++        self.isUserInteractionEnabled = false
+         backgroundColor = .clear
+         layer.borderWidth = 2.0
+         layer.cornerRadius = 6.0
+diff --git a/Sources/WeScan/Scan/RectangleFeaturesFunnel.swift b/Sources/WeScan/Scan/RectangleFeaturesFunnel.swift
+index 66b8565..49a347b 100644
+--- a/Sources/WeScan/Scan/RectangleFeaturesFunnel.swift
++++ b/Sources/WeScan/Scan/RectangleFeaturesFunnel.swift
+@@ -123,8 +123,8 @@ final class RectangleFeaturesFunnel {
+     /// Returns: The best rectangle to display given the current history.
+     private func bestRectangle(withCurrentlyDisplayedRectangle currentRectangle: Quadrilateral?) -> RectangleMatch? {
+         var bestMatch: RectangleMatch?
+-        guard !rectangles.isEmpty else { return nil }
+-        rectangles.reversed().forEach { rectangle in
++        guard !(rectangles ?? []).isEmpty else { return nil }
++        (rectangles ?? []).reversed().forEach { (rectangle) in
+             guard let best = bestMatch else {
+                 bestMatch = rectangle
+                 return
+@@ -168,9 +168,9 @@ final class RectangleFeaturesFunnel {
+     /// Loops through all of the rectangles of the queue, and gives them a score depending on how many they match. @see `RectangleMatch.matchingScore`
+     private func updateRectangleMatches() {
+         resetMatchingScores()
+-        guard !rectangles.isEmpty else { return }
+-        for (i, currentRect) in rectangles.enumerated() {
+-            for (j, rect) in rectangles.enumerated() {
++        guard !(rectangles ?? []).isEmpty else { return }
++            for (i, currentRect) in (rectangles ?? []).enumerated() {
++              for (j, rect) in (rectangles ?? []).enumerated() {
+                 if j > i && currentRect.matches(rect.rectangleFeature, withThreshold: matchingThreshold) {
+                     currentRect.matchingScore += 1
+                     rect.matchingScore += 1
+@@ -182,7 +182,7 @@ final class RectangleFeaturesFunnel {
+     /// Resets the matching score of all of the rectangles in the queue to 0
+     private func resetMatchingScores() {
+         guard !rectangles.isEmpty else { return }
+-        for rectangle in rectangles {
++        for rectangle in rectangles ?? [] {
+             rectangle.matchingScore = 0
+         }
+     }
+diff --git a/Sources/WeScan/Scan/ScannerViewController.swift b/Sources/WeScan/Scan/ScannerViewController.swift
+index 50c1076..9989b41 100644
+--- a/Sources/WeScan/Scan/ScannerViewController.swift
++++ b/Sources/WeScan/Scan/ScannerViewController.swift
+@@ -35,6 +35,14 @@ public final class ScannerViewController: UIViewController {
+         return button
+     }()
+
++    private lazy var photosButton: UIButton = {
++        let button = UIButton()
++        button.setTitle(NSLocalizedString("wescan.scanning.photos", tableName: nil, bundle: Bundle(for: ScannerViewController.self), value: "Photos", comment: "The photos button"), for: .normal)
++        button.translatesAutoresizingMaskIntoConstraints = false
++        button.addTarget(self, action: #selector(photosImageScannerController), for: .touchUpInside)
++        return button
++    }()
++
+     private lazy var cancelButton: UIButton = {
+         let button = UIButton()
+         button.setTitle(NSLocalizedString("wescan.scanning.cancel", tableName: nil, bundle: Bundle(for: ScannerViewController.self), value: "Cancel", comment: "The cancel button"), for: .normal)
+@@ -126,6 +134,7 @@ public final class ScannerViewController: UIViewController {
+         view.addSubview(quadView)
+         view.addSubview(cancelButton)
+         view.addSubview(shutterButton)
++        view.addSubview(photosButton)
+         view.addSubview(activityIndicator)
+     }
+
+@@ -144,6 +153,7 @@ public final class ScannerViewController: UIViewController {
+         var quadViewConstraints = [NSLayoutConstraint]()
+         var cancelButtonConstraints = [NSLayoutConstraint]()
+         var shutterButtonConstraints = [NSLayoutConstraint]()
++        var photosButtonConstraints = [NSLayoutConstraint]()
+         var activityIndicatorConstraints = [NSLayoutConstraint]()
+
+         quadViewConstraints = [
+@@ -169,6 +179,10 @@ public final class ScannerViewController: UIViewController {
+                 cancelButton.leftAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leftAnchor, constant: 24.0),
+                 view.safeAreaLayoutGuide.bottomAnchor.constraint(equalTo: cancelButton.bottomAnchor, constant: (65.0 / 2) - 10.0)
+             ]
++            photosButtonConstraints = [
++                photosButton.rightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.rightAnchor, constant: -24.0),
++                view.safeAreaLayoutGuide.bottomAnchor.constraint(equalTo: photosButton.bottomAnchor, constant: (65.0 / 2) - 10.0)
++            ]
+
+             let shutterButtonBottomConstraint = view.safeAreaLayoutGuide.bottomAnchor.constraint(equalTo: shutterButton.bottomAnchor, constant: 8.0)
+             shutterButtonConstraints.append(shutterButtonBottomConstraint)
+@@ -177,12 +191,16 @@ public final class ScannerViewController: UIViewController {
+                 cancelButton.leftAnchor.constraint(equalTo: view.leftAnchor, constant: 24.0),
+                 view.bottomAnchor.constraint(equalTo: cancelButton.bottomAnchor, constant: (65.0 / 2) - 10.0)
+             ]
++            photosButtonConstraints = [
++                photosButton.rightAnchor.constraint(equalTo: view.rightAnchor, constant: -24.0),
++                view.bottomAnchor.constraint(equalTo: photosButton.bottomAnchor, constant: (65.0 / 2) - 10.0)
++            ]
+
+             let shutterButtonBottomConstraint = view.bottomAnchor.constraint(equalTo: shutterButton.bottomAnchor, constant: 8.0)
+             shutterButtonConstraints.append(shutterButtonBottomConstraint)
+         }
+
+-        NSLayoutConstraint.activate(quadViewConstraints + cancelButtonConstraints + shutterButtonConstraints + activityIndicatorConstraints)
++        NSLayoutConstraint.activate(quadViewConstraints + cancelButtonConstraints + shutterButtonConstraints + photosButtonConstraints + activityIndicatorConstraints)
+     }
+
+     // MARK: - Tap to Focus
+@@ -270,6 +288,11 @@ public final class ScannerViewController: UIViewController {
+         imageScannerController.imageScannerDelegate?.imageScannerControllerDidCancel(imageScannerController)
+     }
+
++    @objc private func photosImageScannerController() {
++        guard let imageScannerController = navigationController as? ImageScannerController else { return }
++        imageScannerController.imageScannerDelegate?.imageScannerControllerGoToPhotos(imageScannerController)
++    }
++
+ }
+
+ extension ScannerViewController: RectangleDetectionDelegateProtocol {
